@@ -24,29 +24,9 @@ import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Button;
 import android.widget.Toast;
 
-import com.x.database.core.impl.view.a;
-import com.x.models.g5;
-import com.x.models.gh;
-import com.x.models.i6;
-import com.x.models.q8;
-import com.x.models.s1;
-import com.x.models.v0;
-import com.x.models.v4;
-import com.x.models.y4;
-import com.x.models.timelines.items.a1;
-import com.x.models.timelines.items.b2;
-import com.x.models.timelines.items.d1;
-import com.x.models.timelines.items.j0;
-import com.x.models.timelines.items.j1;
-import com.x.models.timelines.items.m0;
-import com.x.models.timelines.items.p1;
-import com.x.models.timelines.items.y1;
-import com.x.navigation.gt;
-import com.x.navigation.qt;
-import com.x.repositories.urt.b0;
-import com.x.urt.paging.bottom.h;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -61,11 +41,11 @@ import java.util.Set;
  *  - XApplication.onCreate                         -> init(app)
  *  - util.b.W(row, ...) entry                      -> enterRow(row)       (remembers timeline_id of the DB row)
  *  - util.b.W(...) call sites                      -> filterItem(item)    (DB row -> UrtTimelineItem)
- *  - urt.paging.bottom.h.a(LoadMore)               -> blockBottomPaging(pager)
+ *  - bottom pager loadMore(LoadMore)               -> blockBottomPaging(pager)
  *  - FeatureSwitchesRepositoryImpl.get/peekBoolean -> fsBool(key)
  *  - home.tabbed.r.e(OnLogoClicked)                -> onLogoClick()
  *  - video.tab.h2.<init>(.., pinnedPost, playlist) -> videoPlaylist(pinnedPost, playlist)
- *  - account.b0.<init>(userId, ...)                -> ownAccount(userId)
+ *  - AccountData.<init>(userId, ...)               -> ownAccount(userId)
  */
 public final class Mod {
     private static final String TAG = "XMod";
@@ -123,6 +103,7 @@ public final class Mod {
     private static Handler main;
     private static Context appCtx;
     private static long lastLogoTap, lastEndToast;
+    static volatile boolean autoUpdate = true;
     private static final Set<Long> ownIds = Collections.synchronizedSet(new HashSet<Long>());
     private static final ThreadLocal<String> curTimeline = new ThreadLocal<>();
     // safety valve for the "following only" filter
@@ -149,6 +130,7 @@ public final class Mod {
                 @Override public void onActivityResumed(Activity a) {
                     topActivity = new WeakReference<>(a);
                     maybeShowHint(a);
+                    Updater.maybeAutoCheck(a, prefs, autoUpdate);
                 }
                 @Override public void onActivityPaused(Activity a) {}
                 @Override public void onActivityStopped(Activity a) {}
@@ -165,6 +147,7 @@ public final class Mod {
     private static void load() {
         if (prefs == null) return;
         lockMode = prefs.getBoolean("lock_mode", false);
+        autoUpdate = prefs.getBoolean("auto_update", true);
         for (int i = 0; i < KEYS.length; i++) {
             locked[i] = prefs.getBoolean("locked_" + KEYS[i], false);
             val[i] = locked[i] || prefs.getBoolean(KEYS[i], DEFAULTS[i]);
@@ -190,6 +173,7 @@ public final class Mod {
         e.putInt("feed_limit", LIMITS[limitIdx]);
         e.putInt("locked_limit_idx", lockedLimitIdx);
         e.putBoolean("lock_mode", lockMode);
+        e.putBoolean("auto_update", autoUpdate);
         e.apply();
     }
 
@@ -205,11 +189,11 @@ public final class Mod {
                 Toast.LENGTH_LONG).show();
     }
 
-    /** account.b0 (AccountData) constructor: remember ids of logged-in accounts ("own" posts). */
+    /** AccountData constructor: remember ids of logged-in accounts ("own" posts). */
     public static void ownAccount(Object userId) {
         try {
-            if (!(userId instanceof gh)) return;
-            long id = ((gh) userId).a;
+            if (userId == null) return;
+            long id = A.userIdValue(userId);
             if (ownIds.add(id) && prefs != null) {
                 Set<String> s = new HashSet<>(prefs.getStringSet("own_ids", Collections.<String>emptySet()));
                 s.add(Long.toString(id));
@@ -222,12 +206,13 @@ public final class Mod {
 
     // =================================================================== timeline items
 
-    /** Entry of util.b.W(row, ...): remember which timeline the row belongs to. */
+    /** Entry of the DB-row -> UrtTimelineItem mapper: remember which timeline the row belongs to. */
     public static void enterRow(Object row) {
         String id = null;
         try {
-            a r = (a) row;
-            if (r != null && r.a != null && r.a.a != null) id = r.a.a.a;
+            Object entry = row == null ? null : A.rowEntry(row);
+            Object tid = entry == null ? null : A.entryTimelineId(entry);
+            if (tid != null) id = (String) A.timelineIdValue(tid);
         } catch (Throwable ignored) {
         }
         curTimeline.set(id);
@@ -235,12 +220,15 @@ public final class Mod {
 
     static final String[] HOME_TIMELINES = {"FOR_YOU", "FOLLOWING", "RANKED_FOLLOWING", "HOME_SUBSCRIBED"};
 
-    /** urt.b0.p(direction, cursor): every network fetch of a URT timeline goes through it. true = skip. */
+    private static String enumName(Object e) {
+        return e instanceof Enum ? ((Enum<?>) e).name() : "";
+    }
+
+    /** URT repository fetch(direction, cursor): every network fetch of a URT timeline goes through it. true = skip. */
     public static boolean blockFetch(Object repo) {
         if (!val[DISABLE_HOME]) return false;
         try {
-            Object type = ((b0) repo).a;
-            String name = type == null ? "" : ((Enum<?>) type).name();
+            String name = enumName(A.urtRepoType(repo));
             for (String h : HOME_TIMELINES) if (h.equals(name)) return true;
         } catch (Throwable t) {
             Log.w(TAG, "blockFetch", t);
@@ -262,22 +250,20 @@ public final class Mod {
             boolean following = tlStarts(tl, "FOLLOWING", "RANKED_FOLLOWING");
             boolean feed = following || tlStarts(tl, "FOR_YOU", "HOME_SUBSCRIBED", "EXPLORE_FOR_YOU",
                     "LIST_POSTS", "COMMUNITIES_HOME", "COMMUNITY_DETAIL_POSTS", "TOPIC");
+            boolean post = A.isPost(item);
 
             if (val[DISABLE_HOME] && tlStarts(tl, HOME_TIMELINES)) return null;
             if (val[HIDE_ADS] && isAd(item)) return null;
             if (val[FOLLOWING_ONLY] && following && !followingKeep(item)) return null;
-            if (val[HIDE_VIDEOS] && feed && item instanceof j1 && postHasMedia(((j1) item).a, y4.class)) return null;
-            if (val[HIDE_PHOTOS] && feed && item instanceof j1 && postHasMedia(((j1) item).a, v4.class)) return null;
+            if (val[HIDE_VIDEOS] && feed && post && postHasMedia(A.postResult(item), true)) return null;
+            if (val[HIDE_PHOTOS] && feed && post && postHasMedia(A.postResult(item), false)) return null;
 
-            if (item instanceof a1) {                      // module whose items were all filtered out
-                List l = ((a1) item).a;
-                if (l != null && l.isEmpty()) return null;
+            if (A.isModule(item)) {                        // module whose items were all filtered out
+                Object l = A.moduleItems(item);
+                if (l instanceof List && ((List) l).isEmpty()) return null;
             }
-            if (val[HIDE_ADS] && val[HIDE_PREROLL] && item instanceof j1) {
-                j1 p = (j1) item;
-                if (p.f != null) {                         // prerollMetadata (video pre-roll ad)
-                    return new j1(p.a, p.b, p.c, p.d, p.e, null, p.g, p.h, p.i, p.j, p.k, p.l);
-                }
+            if (val[HIDE_ADS] && val[HIDE_PREROLL] && post && A.postPreroll(item) != null) {
+                return A.postWithoutPreroll(item);         // video pre-roll ad removed
             }
         } catch (Throwable t) {
             Log.w(TAG, "filterItem", t);
@@ -286,43 +272,37 @@ public final class Mod {
     }
 
     private static boolean isAd(Object item) {
-        if (item instanceof p1) return true;                                   // RtbImageAd / SSP slot
-        if (item instanceof j1) {
-            j1 p = (j1) item;
-            return p.e != null || isPromotedEntry(p.c);                        // promotedMetadata
+        if (A.isRtbAd(item)) return true;                                      // RtbImageAd / SSP slot
+        if (A.isPost(item)) return A.postPromoted(item) != null || isPromotedEntry(A.postEntryId(item));
+        if (A.isUser(item)) return A.userPromoted(item) != null || isPromotedEntry(A.userEntryId(item));
+        if (A.isTrend(item)) {
+            Object t = A.trendTrend(item);
+            return (t != null && A.timelineTrendPromoted(t) != null) || isPromotedEntry(A.trendEntryId(item));
         }
-        if (item instanceof b2) {
-            b2 u = (b2) item;
-            return u.h != null || isPromotedEntry(u.c);
+        if (A.isEvent(item)) {                                                 // "promoted_hero"
+            Object e = A.eventSummary(item);
+            return (e != null && A.eventSummaryPromoted(e) != null) || isPromotedEntry(A.eventEntryId(item));
         }
-        if (item instanceof y1) {
-            y1 t = (y1) item;
-            return (t.a != null && t.a.j != null) || isPromotedEntry(t.c);
-        }
-        if (item instanceof m0) {                                              // "promoted_hero"
-            m0 e = (m0) item;
-            return (e.a != null && e.a.i != null) || isPromotedEntry(e.c);
-        }
-        if (item instanceof a1) return isPromotedEntry(((a1) item).f);
+        if (A.isModule(item)) return isPromotedEntry(A.moduleEntryId(item));
         return false;
     }
 
-    private static boolean isPromotedEntry(String entryId) {
-        if (entryId == null) return false;
-        return entryId.startsWith("promoted") || entryId.contains("-promoted-")
-                || entryId.startsWith("superhero-");
+    private static boolean isPromotedEntry(Object entryId) {
+        if (!(entryId instanceof String)) return false;
+        String id = (String) entryId;
+        return id.startsWith("promoted") || id.contains("-promoted-") || id.startsWith("superhero-");
     }
 
     // ---- "following only" ----
 
     private static boolean followingKeep(Object item) {
-        if (item instanceof j0) return true;                 // cursors are needed for paging
-        if (item instanceof j1) return followedPost(((j1) item).a);
-        if (item instanceof a1) {                            // conversation modules: keep, "who to follow": drop
-            List l = ((a1) item).a;
-            if (l == null) return true;
-            for (Object o : l) {
-                if (o instanceof d1 && ((d1) o).a instanceof b2) return false;
+        if (A.isCursor(item)) return true;                   // cursors are needed for paging
+        if (A.isPost(item)) return followedPost(A.postResult(item));
+        if (A.isModule(item)) {                              // conversation modules: keep, "who to follow": drop
+            Object l = A.moduleItems(item);
+            if (!(l instanceof List)) return true;
+            for (Object o : (List) l) {
+                if (A.isModuleItem(o) && A.isUser(A.moduleItemItem(o))) return false;
             }
             return true;
         }
@@ -332,19 +312,19 @@ public final class Mod {
     private static boolean followedPost(Object post) {
         Object author = null;
         boolean repost = false;
-        if (post instanceof s1) {
-            s1 s = (s1) post;
-            if (s.b != null) author = s.b.f;
-            repost = s.d != null;
-        } else if (post instanceof v0) {
-            author = ((v0) post).f;
+        if (A.isContextualPost(post)) {
+            Object canonical = A.ctxCanonical(post);
+            if (canonical != null) author = A.canonicalAuthor(canonical);
+            repost = A.ctxRepost(post) != null;
+        } else if (A.isCanonicalPost(post)) {
+            author = A.canonicalAuthor(post);
         }
         if (repost && val[FOLLOWING_NO_REPOSTS] && !isOwn(author)) return false;
-        if (!(author instanceof g5)) return true;            // unknown -> keep
-        g5 u = (g5) author;
-        if (isOwn(u)) return true;
-        if (u.h == null || followFailOpen) return true;      // relationship unknown -> keep
-        if (u.h.a) {
+        if (!A.isMinimalUser(author)) return true;           // unknown -> keep
+        if (isOwn(author)) return true;
+        Object friendship = A.userFriendship(author);
+        if (friendship == null || followFailOpen) return true;  // relationship unknown -> keep
+        if (A.friendshipFollowed(friendship)) {
             followKept++;
             return true;
         }
@@ -358,40 +338,46 @@ public final class Mod {
     }
 
     private static boolean isOwn(Object author) {
-        return author instanceof g5 && ((g5) author).a != null && ownIds.contains(((g5) author).a.a);
+        if (!A.isMinimalUser(author)) return false;
+        Object id = A.userId(author);
+        return id != null && ownIds.contains(A.userIdValue(id));
     }
 
-    // ---- videos ----
+    // ---- media ----
 
-    private static boolean postHasMedia(Object post, Class<?> kind) {
-        if (post instanceof v0) return mediaHas(((v0) post).d, kind);
-        if (post instanceof s1) {
-            s1 s = (s1) post;
-            if (s.b != null && mediaHas(s.b.d, kind)) return true;
-            if (s.d != null) {
-                q8 r = s.d;
-                if (r.a != null && mediaHas(r.a.d, kind)) return true;
-                if (r.b != null && r.b != post && postHasMedia(r.b, kind)) return true;
+    private static boolean postHasMedia(Object post, boolean video) {
+        if (post == null) return false;
+        if (A.isCanonicalPost(post)) return mediaHas(A.canonicalMedia(post), video);
+        if (A.isContextualPost(post)) {
+            Object canonical = A.ctxCanonical(post);
+            if (canonical != null && mediaHas(A.canonicalMedia(canonical), video)) return true;
+            Object repost = A.ctxRepost(post);
+            if (repost != null) {
+                Object rc = A.repostCanonical(repost);
+                if (rc != null && mediaHas(A.canonicalMedia(rc), video)) return true;
+                Object rq = A.repostQuoted(repost);
+                if (rq != null && rq != post && postHasMedia(rq, video)) return true;
             }
-            return s.c != null && s.c != post && postHasMedia(s.c, kind);
+            Object quoted = A.ctxQuoted(post);
+            return quoted != null && quoted != post && postHasMedia(quoted, video);
         }
         return false;
     }
 
-    /** kind: y4 = MediaContentVideo, v4 = MediaContentImage */
-    private static boolean mediaHas(Object media, Class<?> kind) {
+    private static boolean mediaHas(Object media, boolean video) {
         if (!(media instanceof Collection)) return false;
-        for (Object m : (Collection) media) if (kind.isInstance(m)) return true;
+        for (Object m : (Collection) media) {
+            if (video ? A.isVideo(m) : A.isImage(m)) return true;
+        }
         return false;
     }
 
-    /** video.tab.h2: when a video is opened from a post, show just that post (bounded playlist of one). */
+    /** Immersive video timeline: when a video is opened from a post, show just that post (bounded playlist of one). */
     public static Object videoPlaylist(Object pinnedPost, Object playlist) {
-        if (!val[SINGLE_VIDEO] || playlist != null || !(pinnedPost instanceof qt)) return playlist;
+        if (!val[SINGLE_VIDEO] || playlist != null || !A.isPinnedPost(pinnedPost)) return playlist;
         try {
-            i6 id = ((qt) pinnedPost).a();
-            if (id == null) return null;
-            return new gt(Collections.singletonList(id), id);
+            Object id = A.pinnedPostId(pinnedPost);
+            return id == null ? null : A.newPlaylist(id);
         } catch (Throwable t) {
             Log.w(TAG, "videoPlaylist", t);
             return null;
@@ -411,18 +397,16 @@ public final class Mod {
     // =================================================================== feed limit
 
     /** Called on every LoadMore request of a bottom pager. true = swallow the request (no more pages). */
-    public static boolean blockBottomPaging(Object pagerObj) {
+    public static boolean blockBottomPaging(Object pager) {
         if (!val[LIMIT_FEED]) return false;
         try {
-            h pager = (h) pagerObj;
-            Object type = pager.b.c();
-            String name = type == null ? "" : ((Enum<?>) type).name();
+            String name = enumName(A.repoType(A.pagerRepo(pager)));
             boolean home = name.equals("FOR_YOU") || name.equals("FOLLOWING")
                     || name.equals("RANKED_FOLLOWING") || name.equals("HOME_SUBSCRIBED");
             boolean other = name.equals("EXPLORE_FOR_YOU") || name.equals("VIDEO_TAB")
                     || name.equals("CONNECT_TAB");
             if (!home && !(val[LIMIT_OTHER] && other)) return false;
-            int count = pager.n;
+            int count = A.pagerCount(pager);
             if (count <= 0) return false;                  // never block the very first load
             int limit = LIMITS[limitIdx];
             if (limit > 0 && count < limit) return false;
@@ -531,6 +515,24 @@ public final class Mod {
             sw[FOLLOWING_ONLY].setOnCheckedChangeListener(l);
             sync.run();
 
+            root.addView(header(c, "Updates"));
+            root.addView(small(c, Updater.versionLabel() + (Updater.configured()
+                    ? " · updates from GitHub" : " · updates not configured in this build")));
+            final Switch swAuto = new Switch(c);
+            styleSwitch(c, swAuto, "Check for updates automatically",
+                    "At most twice a day, when the app is opened", autoUpdate);
+            swAuto.setEnabled(Updater.configured());
+            swAuto.setOnCheckedChangeListener((b, on) -> {
+                autoUpdate = on;
+                if (prefs != null) prefs.edit().putBoolean("auto_update", on).apply();
+            });
+            root.addView(swAuto);
+            Button checkNow = new Button(c);
+            checkNow.setText("Check for updates now");
+            checkNow.setEnabled(Updater.configured());
+            checkNow.setOnClickListener(v -> Updater.check(a, prefs, true));
+            root.addView(checkNow);
+
             TextView note = small(c, "Feed changes apply after you refresh the feed (pull down). "
                     + "Turning off Google ads takes effect after an app restart.");
             note.setPadding(0, dp(c, 12), 0, 0);
@@ -626,7 +628,7 @@ public final class Mod {
 
     // =================================================================== ui helpers
 
-    private static Context themed(Activity a) {
+    static Context themed(Activity a) {
         boolean night = (a.getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         return new ContextThemeWrapper(a, night ? android.R.style.Theme_DeviceDefault_Dialog_Alert

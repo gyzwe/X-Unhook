@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Install modded X via adb. The original X must be uninstalled first (different signature).
+# Install the X Mod clone (package com.twitter.android.xmod) next to the official X app.
 set -e
 cd "$(dirname "$0")/build/out"
-adb install-multiple -r base.apk split_config.arm64_v8a.apk split_config.xxhdpi.apk split_config.xxxhdpi.apk \
-  split_config.en.apk split_config.ru.apk
+splits=$(ls split_config.*.apk)
+adb install-multiple -r base.apk $splits
