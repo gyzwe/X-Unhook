@@ -12,3 +12,5 @@ mod-src/build/
 *.apks
 *.apkm
 /secrets/
+__pycache__/
+*.pyc

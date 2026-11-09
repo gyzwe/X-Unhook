@@ -190,13 +190,14 @@ def main():
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
     ks = SECRETS / "xmod.keystore"
+    kpw = (SECRETS / "keystore_pass").read_text().strip() if (SECRETS / "keystore_pass").exists() else "xmodpass"
     if not ks.exists():
-        run(["keytool", "-genkeypair", "-keystore", ks, "-storepass", "xmodpass", "-keypass", "xmodpass",
+        run(["keytool", "-genkeypair", "-keystore", ks, "-storepass", kpw, "-keypass", kpw,
              "-alias", "xmod", "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000", "-dname", "CN=X Unhook"])
     for apk in sorted(staged.glob("*.apk")):
         dst = out / apk.name
         run([BT / "zipalign", "-P", "16", "-f", "4", apk, dst])
-        run([BT / "apksigner", "sign", "--ks", ks, "--ks-pass", "pass:xmodpass", "--ks-key-alias", "xmod", dst])
+        run([BT / "apksigner", "sign", "--ks", ks, "--ks-pass", f"pass:{kpw}", "--ks-key-alias", "xmod", dst])
         run([BT / "apksigner", "verify", dst], stdout=subprocess.DEVNULL)
     for f in out.glob("*.idsig"):
         f.unlink()

@@ -1,82 +1,98 @@
 # X Unhook
 
-A patch for the official X (Twitter) Android app: hides ads, limits infinite scrolling, offers a
-"Following: only accounts I follow" filter, hides photos and videos, can turn off the Home feed,
-and has a permanent lock. The menu opens with a double tap on the X logo on Home.
+**X (Twitter) for Android without the parts that keep you scrolling.**
 
-It installs as a **separate app** (`com.twitter.android.unhook`, label "X Unhook") next to the official X
-and updates itself from GitHub Releases.
+X Unhook patches the official X Android app. It is not a website wrapper or an accessibility
+service. It removes ads and recommendations, can stop the feed from loading forever, and leaves
+search, profiles, notifications and messages working as usual. It installs **next to** the
+official X app and updates itself from this repository's releases.
 
-## Build
+> Unofficial. Not affiliated with X Corp. See the [disclaimer](#disclaimer).
+
+## Features
+
+| | |
+|---|---|
+| **No ads** | Promoted posts, accounts, trends and event cards, Google ads, video pre-rolls |
+| **Finite feed** | Stop loading older posts after the first page or after ~50 / 100 / 200 items. Pull down to refresh. |
+| **Following, for real** | Only posts from accounts you follow (and your own): no "Who to follow", topics or suggestions. Optionally no reposts. |
+| **One video at a time** | A video opened from a post plays on its own; swiping does not lead to more recommended videos |
+| **Hide videos / photos** | In For you, Following, Explore, Lists and Communities. Profiles, search and replies are not affected. |
+| **Turn off Home** | For you and Following stay empty and nothing is loaded |
+| **Permanent lock** | Features you lock stay on until you reinstall the app; everything else stays changeable |
+| **Self-update** | Checks this repo's releases and installs updates in place |
+
+Open the menu by **double-tapping the X logo** on the Home screen.
+
+## Install
+
+1. Download `X-Unhook-v<N>-X<version>.apks` from the [latest release](https://github.com/gyzwe/X-Unhook/releases/latest).
+2. Install it with [SAI (Split APKs Installer)](https://github.com/Aefyr/SAI), or with
+   `adb install-multiple base.apk split_config.*.apk` using the individual APKs from the release.
+3. Log in as usual. The app is called **X Unhook** (`com.twitter.android.unhook`) and does not replace the official app.
+
+Requirements: Android 10+, arm64.
+
+Known limitations:
+- Push notifications may not work, because Firebase is bound to the official package name.
+- Login depends on X's servers accepting a re-signed client.
+
+## Build it yourself
+
+You need an X `.apkm` bundle (for example from APKMirror), Python 3, and these tools in `tools/`:
+JDK 21, apktool, Android build-tools and an `android-35` platform.
 
 ```
-python3 -I mod-src/build.py --apkm /path/to/com.twitter.android_<ver>.apkm [--bump] [--no-clone]
-python3 -I mod-src/release.py --notes "what changed" [--push]
+python3 -I mod-src/build.py --apkm com.twitter.android_<version>.apkm
 ```
 
-`build.py` runs the whole pipeline. Output goes to `build/out/`: `base.apk`, `split_*.apk`,
-`X-Mod-v<N>-X<ver>.apks` and `xmod-release.json`.
+The build writes `build/out/` with the signed `base.apk`, the splits, an `.apks` bundle and
+`xmod-release.json`. A signing key is generated in `secrets/` on first run. Keep that key:
+updates only install over a build signed with the same key.
 
-Local files (in `.gitignore`):
-- `tools/`: JDK 21, apktool, Android build-tools and platform
-- `secrets/xmod.keystore`: signing key. Keep it, or updates will no longer install.
-- `secrets/read_token`: read-only token that is built into the APK so the updater can read the private repo
-- `secrets/release_token`: token used to publish releases
+## How it works
 
-Settings live in `mod-src/xmod.json`: `mod_version`, `package`, `label`, `repo`.
-
-## How it survives X updates: fingerprints
-
-Patches do not use obfuscated names. `mod-src/xmodpatch/fingerprints.py` finds every class, field
-and method from stable anchors:
+**Fingerprints, not obfuscated names.** X is obfuscated with R8, so class names such as `j1` or
+`util.b` change with every release. `mod-src/xmodpatch/fingerprints.py` locates every class,
+field and method it needs from anchors that survive obfuscation:
 
 | Anchor | Example |
 |---|---|
-| kotlinx serial names + serializer element names | `com.x.models.timelines.items.UrtTimelinePost` → `promotedMetadata`, `prerollMetadata` |
+| kotlinx serial names and serializer element names | `com.x.models.timelines.items.UrtTimelinePost` → `promotedMetadata` |
 | field ↔ property mapping | the synthetic deserialization constructor (`iput pN → field`) |
 | data-class `toString` prefixes | `TimelineView(timelineEntryEntity=`, `LoadMore(trigger=` |
-| log strings | `Duplicate bottom cursor request. Dropped.`, `URTTimelineRepository`, `XApplication#onCreate` |
-| enum constants | `FOR_YOU` / `FOLLOWING` / `VIDEO_TAB`, `OLDER_THAN` / `PULL_TO_REFRESH` |
-| method shapes | `(TimelineView, LinkedHashMap, LinkedHashMap, …) → UrtTimelineItem` (the DB row → item mapper) |
+| log strings | `Duplicate bottom cursor request. Dropped.`, `URTTimelineRepository` |
+| enum constants and method shapes | `FOR_YOU`/`FOLLOWING`, the DB row → `UrtTimelineItem` mapper |
 
-The mod code (`mod-src/src/xmod/*.java`) only works with `Object`. All access to X's models goes
-through `xmod.A`. `xmodpatch/accessors.py` generates `A` as smali with the real descriptors of the
-current build, plus a Java stub with the same signatures for compiling. If X changes something
-the mod depends on, the build stops with a clear `FINGERPRINT FAILED: …` instead of producing a
-broken APK.
+The mod code (`mod-src/src/xmod`) only works with `Object`. All access to X's models goes through
+a generated accessor class (`xmodpatch/accessors.py`) that carries the real descriptors of the
+current build. If X changes something the mod relies on, the build stops with
+`FINGERPRINT FAILED: …` instead of producing a broken APK.
 
-## Hooks (`xmodpatch/hooks.py`)
+**Hooks** (`xmodpatch/hooks.py`) are inserted in these places:
+- `Application.onCreate`;
+- the timeline DB row → item mapper, at its entry and at every call site;
+- the bottom pager's `loadMore`;
+- the URT repository's network fetch;
+- feature switches;
+- the Home logo click;
+- the immersive video timeline;
+- the `AccountData` constructor.
 
-| Location (found by fingerprint) | Call |
-|---|---|
-| `Application.onCreate` | `Mod.init` |
-| entry of the DB row → `UrtTimelineItem` mapper | `Mod.enterRow` (remembers `timeline_id` = `TimelineType.name` + suffix) |
-| every call site of that mapper | `Mod.filterItem` (ads, following-only, photos/videos, Home off, pre-roll) |
-| bottom pager `loadMore(LoadMore)` | `Mod.blockBottomPaging` |
-| URT repository `fetch(direction, cursor)` | `Mod.blockFetch` (Home off: no network requests) |
-| `FeatureSwitchesRepositoryImpl.get/peekBoolean` | `Mod.fsBool` (Google SSP ads) |
-| `OnLogoClicked` handler | `Mod.onLogoClick` (double tap → menu) |
-| immersive video timeline `<init>(…, pinnedPost, boundedPlaylist, …)` | `Mod.videoPlaylist` (one video only) |
-| `AccountData(userId, …)` | `Mod.ownAccount` |
+**Clone package** (`xmodpatch/axml.py`): the build edits the binary `AndroidManifest.xml` (base and
+splits) and `resources.arsc` directly. It renames the package, provider authorities, custom
+permissions and the account type, sets the label, and adds `REQUEST_INSTALL_PACKAGES` for self-updates.
 
-The patched classes and `A.smali` are moved into a new dex, because the original dexes are at the
-65k reference limit.
+**Updates** (`Updater.java`): the app checks `releases/latest`. If the X version is unchanged, it
+downloads only `base.apk` and installs it with `PackageInstaller` in `MODE_INHERIT_EXISTING`.
 
-## Clone package (`xmodpatch/axml.py`)
+## Disclaimer
 
-The binary `AndroidManifest.xml` (base and every split) and `resources.arsc` are edited directly:
-- `package`, provider authorities and custom `<permission>`s are renamed. Class names under
-  `com.twitter.android.*` are left alone.
-- `account_type` becomes `<package>.auth.login`, so AccountManager does not collide with the official app.
-- `android:label` is set to "X Unhook".
-- `REQUEST_INSTALL_PACKAGES` is added for self-updates.
+X Unhook is an unofficial, independent project. It is not affiliated with, endorsed by or
+sponsored by X Corp. "X" and "Twitter" are trademarks of their respective owners.
 
-Unchanged strings keep their original bytes, so an untouched file round-trips byte-for-byte.
+It modifies the official app and is installed outside Google Play. Using a modified client may
+violate X's Terms of Service and may get your account restricted. **Use it at your own risk.**
 
-## Updates (`Updater.java`)
-
-The app checks the latest release of the private repo with a read-only token, at most every 12 h
-or from the menu. If the X version is the same, it downloads only `base.apk` and installs it with
-`PackageInstaller` in `MODE_INHERIT_EXISTING`. If the X version changed, it downloads base plus the
-installed config splits. The redirect to GitHub's storage is followed manually, so the token never
-leaves `api.github.com`.
+X Unhook does not collect, store or send your data or credentials. Its only network request of
+its own is the update check against this repository's GitHub releases.
