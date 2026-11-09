@@ -37,15 +37,17 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * X Mod. Hooks (inserted via smali, see patch.py):
- *  - XApplication.onCreate                         -> init(app)
- *  - util.b.W(row, ...) entry                      -> enterRow(row)       (remembers timeline_id of the DB row)
- *  - util.b.W(...) call sites                      -> filterItem(item)    (DB row -> UrtTimelineItem)
- *  - bottom pager loadMore(LoadMore)               -> blockBottomPaging(pager)
- *  - FeatureSwitchesRepositoryImpl.get/peekBoolean -> fsBool(key)
- *  - home.tabbed.r.e(OnLogoClicked)                -> onLogoClick()
- *  - video.tab.h2.<init>(.., pinnedPost, playlist) -> videoPlaylist(pinnedPost, playlist)
- *  - AccountData.<init>(userId, ...)               -> ownAccount(userId)
+ * X Mod. Hooks are inserted by mod-src/xmodpatch/hooks.py at locations found by fingerprints
+ * (see README). X's own models are only touched through the generated accessor layer xmod.A:
+ *  - Application.onCreate                      -> init(app)
+ *  - DB row -> UrtTimelineItem mapper entry    -> enterRow(row)       (remembers timeline_id of the row)
+ *  - mapper call sites                         -> filterItem(item)
+ *  - bottom pager loadMore(LoadMore)           -> blockBottomPaging(pager)
+ *  - URT repository fetch(direction, cursor)   -> blockFetch(repo)
+ *  - FeatureSwitchesRepositoryImpl.getBoolean  -> fsBool(key)
+ *  - OnLogoClicked handler                     -> onLogoClick()
+ *  - immersive video timeline constructor      -> videoPlaylist(pinnedPost, playlist)
+ *  - AccountData constructor                   -> ownAccount(userId)
  */
 public final class Mod {
     private static final String TAG = "XMod";
