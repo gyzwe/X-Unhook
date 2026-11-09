@@ -14,3 +14,22 @@ mod-src/build/
 /secrets/
 __pycache__/
 *.pyc
+
+# Android Studio / Gradle
+.gradle/
+build/
+.kotlin/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.aab
+output-metadata.json
+*.iml
+.idea/
+misc.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
+*.jks
+google-services.json
+*.hprof
