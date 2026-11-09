@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the X Mod clone (package com.twitter.android.xmod) next to the official X app.
+# Install the X Unhook (package com.twitter.android.unhook) next to the official X app.
 set -e
 cd "$(dirname "$0")/build/out"
 splits=$(ls split_config.*.apk)

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Build X Mod from an X .apkm bundle.
+"""Build X Unhook from an X .apkm bundle.
 
     python3 -I mod-src/build.py --apkm /path/to/com.twitter.android_*.apkm [--no-clone] [--bump]
 
 Pipeline: extract -> apktool decode (smali only) -> fingerprint -> hooks -> accessor layer ->
 clone manifest/resources -> compile mod -> apktool build -> splits -> zipalign + sign -> bundle.
-Outputs land in build/out/ (base.apk, split_*.apk, X-Mod-v<N>.apks, xmod-release.json).
+Outputs land in build/out/ (base.apk, split_*.apk, X-Unhook-v<N>.apks, xmod-release.json).
 """
 import argparse
 import glob
@@ -111,7 +111,7 @@ def main():
                                  for d in dec.iterdir() if d.name.startswith("smali"))
         man = axml.AXml((dec / "AndroidManifest.xml").read_bytes())
         changed = axml.rename_package(man, ORIG_PACKAGE, package, is_class)
-        labels = axml.set_app_label(man, cfg.get("label", "X Mod"))
+        labels = axml.set_app_label(man, cfg.get("label", "X Unhook"))
         man.add_uses_permission("android.permission.REQUEST_INSTALL_PACKAGES")
         (dec / "AndroidManifest.xml").write_bytes(man.build())
         res = axml.ResTable((dec / "resources.arsc").read_bytes())
@@ -192,7 +192,7 @@ def main():
     ks = SECRETS / "xmod.keystore"
     if not ks.exists():
         run(["keytool", "-genkeypair", "-keystore", ks, "-storepass", "xmodpass", "-keypass", "xmodpass",
-             "-alias", "xmod", "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000", "-dname", "CN=X Mod"])
+             "-alias", "xmod", "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000", "-dname", "CN=X Unhook"])
     for apk in sorted(staged.glob("*.apk")):
         dst = out / apk.name
         run([BT / "zipalign", "-P", "16", "-f", "4", apk, dst])
@@ -204,7 +204,7 @@ def main():
     meta = {"mod_version": cfg["mod_version"], "x_version": x_version, "x_version_code": x_code,
             "package": package}
     (out / "xmod-release.json").write_text(json.dumps(meta, indent=1) + "\n")
-    bundle = out / f"X-Mod-v{cfg['mod_version']}-X{x_version}.apks"
+    bundle = out / f"X-Unhook-v{cfg['mod_version']}-X{x_version}.apks"
     with zipfile.ZipFile(bundle, "w", zipfile.ZIP_STORED) as z:
         for apk in sorted(out.glob("*.apk")):
             z.write(apk, apk.name)

@@ -37,7 +37,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * X Mod. Hooks are inserted by mod-src/xmodpatch/hooks.py at locations found by fingerprints
+ * X Unhook. Hooks are inserted by mod-src/xmodpatch/hooks.py at locations found by fingerprints
  * (see README). X's own models are only touched through the generated accessor layer xmod.A:
  *  - Application.onCreate                      -> init(app)
  *  - DB row -> UrtTimelineItem mapper entry    -> enterRow(row)       (remembers timeline_id of the row)
@@ -187,7 +187,7 @@ public final class Mod {
     private static void maybeShowHint(Activity a) {
         if (prefs == null || prefs.getBoolean("hint_shown", false)) return;
         prefs.edit().putBoolean("hint_shown", true).apply();
-        Toast.makeText(a, "X Mod: double-tap the X logo on Home to open the mod menu",
+        Toast.makeText(a, "X Unhook: double-tap the X logo on Home to open the menu",
                 Toast.LENGTH_LONG).show();
     }
 
@@ -333,7 +333,7 @@ public final class Mod {
         followDropped++;
         if (followKept == 0 && followDropped >= 15) {        // data looks wrong: never empty the whole feed
             followFailOpen = true;
-            toast("X Mod: could not read who you follow, so the Following filter is paused");
+            toast("X Unhook: could not read who you follow, so the Following filter is paused");
             return true;
         }
         return false;
@@ -415,7 +415,7 @@ public final class Mod {
             long now = SystemClock.uptimeMillis();
             if (now - lastEndToast > 15000) {
                 lastEndToast = now;
-                toast("End of feed: infinite scrolling is off (X Mod)");
+                toast("End of feed: infinite scrolling is off (X Unhook)");
             }
             return true;
         } catch (Throwable t) {
@@ -544,7 +544,7 @@ public final class Mod {
             sv.addView(root);
 
             new AlertDialog.Builder(c)
-                    .setTitle("X Mod")
+                    .setTitle("X Unhook")
                     .setView(sv)
                     .setPositiveButton("Save", (d, w) -> trySave(a, sw, rg, swLock, false))
                     .setNeutralButton("Save and restart", (d, w) -> trySave(a, sw, rg, swLock, true))

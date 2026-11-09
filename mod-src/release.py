@@ -77,8 +77,8 @@ def main():
     st, rel = call("GET", f"{API}/repos/{repo}/releases/tags/{tag}", tok)
     if st == 404:
         st, rel = call("POST", f"{API}/repos/{repo}/releases", tok, body={
-            "tag_name": tag, "name": f"X Mod {tag} (X {meta['x_version']})",
-            "body": notes or f"X Mod {tag} for X {meta['x_version']}", "draft": False, "prerelease": False})
+            "tag_name": tag, "name": f"X Unhook {tag} (X {meta['x_version']})",
+            "body": notes or f"X Unhook {tag} for X {meta['x_version']}", "draft": False, "prerelease": False})
     if st not in (200, 201):
         sys.exit(f"release: HTTP {st}: {rel}")
     print(f"release {tag}: {rel['html_url']}")

@@ -1,10 +1,10 @@
-# X Mod
+# X Unhook
 
 A patch for the official X (Twitter) Android app: hides ads, limits infinite scrolling, offers a
 "Following: only accounts I follow" filter, hides photos and videos, can turn off the Home feed,
 and has a permanent lock. The menu opens with a double tap on the X logo on Home.
 
-It installs as a **separate app** (`com.twitter.android.xmod`, label "X Mod") next to the official X
+It installs as a **separate app** (`com.twitter.android.unhook`, label "X Unhook") next to the official X
 and updates itself from GitHub Releases.
 
 ## Build
@@ -68,7 +68,7 @@ The binary `AndroidManifest.xml` (base and every split) and `resources.arsc` are
 - `package`, provider authorities and custom `<permission>`s are renamed. Class names under
   `com.twitter.android.*` are left alone.
 - `account_type` becomes `<package>.auth.login`, so AccountManager does not collide with the official app.
-- `android:label` is set to "X Mod".
+- `android:label` is set to "X Unhook".
 - `REQUEST_INSTALL_PACKAGES` is added for self-updates.
 
 Unchanged strings keep their original bytes, so an untouched file round-trips byte-for-byte.

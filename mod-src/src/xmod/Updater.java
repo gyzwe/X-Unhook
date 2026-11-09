@@ -56,7 +56,7 @@ final class Updater {
     }
 
     static String versionLabel() {
-        return "X Mod v" + Cfg.MOD_VERSION + " (X " + Cfg.X_VERSION + ")";
+        return "X Unhook v" + Cfg.MOD_VERSION + " (X " + Cfg.X_VERSION + ")";
     }
 
     // ---------------------------------------------------------------- checking
@@ -152,7 +152,7 @@ final class Updater {
         boolean sameX = sameXVersion(a, r);
         String size = humanSize(sameX ? assetSize(r, "base.apk") : totalSize(a, r));
         new AlertDialog.Builder(Mod.themed(a))
-                .setTitle("X Mod update: " + r.tag)
+                .setTitle("X Unhook update: " + r.tag)
                 .setMessage("Installed: " + versionLabel() + "\nAvailable: v" + r.version
                         + (r.xVersion != null && !r.xVersion.isEmpty() ? " (X " + r.xVersion + ")" : "")
                         + "\nDownload: " + size + "\n\n" + notes)
@@ -210,7 +210,7 @@ final class Updater {
 
     private static void download(final Activity a, final Release r) {
         if (Build.VERSION.SDK_INT >= 26 && !a.getPackageManager().canRequestPackageInstalls()) {
-            Toast.makeText(a, "Allow X Mod to install updates, then tap Update again", Toast.LENGTH_LONG).show();
+            Toast.makeText(a, "Allow X Unhook to install updates, then tap Update again", Toast.LENGTH_LONG).show();
             a.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                     Uri.parse("package:" + a.getPackageName())));
             return;
@@ -233,7 +233,7 @@ final class Updater {
         box.addView(label);
         box.addView(bar);
         final AlertDialog dlg = new AlertDialog.Builder(Mod.themed(a))
-                .setTitle("Updating X Mod").setView(box).setCancelable(false).show();
+                .setTitle("Updating X Unhook").setView(box).setCancelable(false).show();
         final long total = Math.max(1, totalSize(a, r));
         busy = true;
 
