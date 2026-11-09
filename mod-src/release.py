@@ -70,9 +70,14 @@ def main():
     tag = f"v{cfg['mod_version']}"
 
     if a.push:
+        # pass the auth header through the environment: never in argv, never in error messages
         auth = base64.b64encode(f"x-access-token:{tok}".encode()).decode()
-        subprocess.run(["git", "-C", str(ROOT), "-c", f"http.extraheader=AUTHORIZATION: basic {auth}",
-                        "push", f"https://github.com/{repo}.git", "HEAD:main", "--tags"], check=True)
+        env = dict(os.environ, GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="http.https://github.com/.extraheader",
+                   GIT_CONFIG_VALUE_0=f"AUTHORIZATION: basic {auth}", GIT_TERMINAL_PROMPT="0")
+        r = subprocess.run(["git", "-C", str(ROOT), "push", f"https://github.com/{repo}.git", "HEAD:main", "--tags"],
+                           env=env)
+        if r.returncode != 0:
+            sys.exit("git push failed (see message above)")
 
     st, rel = call("GET", f"{API}/repos/{repo}/releases/tags/{tag}", tok)
     if st == 404:
