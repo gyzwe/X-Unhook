@@ -96,3 +96,8 @@ violate X's Terms of Service and may get your account restricted. **Use it at yo
 
 X Unhook does not collect, store or send your data or credentials. Its only network request of
 its own is the update check against this repository's GitHub releases.
+
+## License
+
+[MIT](LICENSE) for the X Unhook source code in this repository. The X app itself is not covered
+by this license and remains the property of X Corp.
